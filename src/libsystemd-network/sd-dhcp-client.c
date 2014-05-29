@@ -56,6 +56,7 @@ struct sd_dhcp_client {
                 uint8_t type;
                 struct ether_addr mac_addr;
         } _packed_ client_id;
+        bool broadcast;
         uint32_t xid;
         usec_t start_time;
         uint16_t secs;
@@ -180,6 +181,16 @@ int sd_dhcp_client_set_mac(sd_dhcp_client *client,
         return 0;
 }
 
+int sd_dhcp_client_request_broadcast(sd_dhcp_client *client) {
+        assert_return(client, -EINVAL);
+        assert_return(IN_SET(client->state, DHCP_STATE_INIT,
+                             DHCP_STATE_STOPPED), -EBUSY);
+
+        client->broadcast = true;
+
+        return 0;
+}
+
 int sd_dhcp_client_get_lease(sd_dhcp_client *client, sd_dhcp_lease **ret) {
         assert_return(client, -EINVAL);
         assert_return(ret, -EINVAL);
@@ -285,6 +296,16 @@ static int client_message_init(sd_dhcp_client *client, DHCPPacket **ret,
         /* Although 'secs' field is a SHOULD in RFC 2131, certain DHCP servers
            refuse to issue an DHCP lease if 'secs' is set to zero */
         packet->dhcp.secs = htobe16(client->secs);
+
+        /* RFC2132 section 4.1
+           A client that cannot receive unicast IP datagrams until its protocol
+           software has been configured with an IP address SHOULD set the
+           BROADCAST bit in the 'flags' field to 1 in any DHCPDISCOVER or
+           DHCPREQUEST messages that client sends.  The BROADCAST bit will
+           provide a hint to the DHCP server and BOOTP relay agent to broadcast
+           any messages to the client on the client's subnet. */
+        if (client->broadcast)
+                packet->dhcp.flags = htobe16(0x8000);
 
         /* RFC2132 section 4.1.1:
            The client MUST include its hardware address in the ’chaddr’ field, if

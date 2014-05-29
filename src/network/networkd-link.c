@@ -1640,6 +1640,25 @@ static int link_configure(Link *link) {
                 if (r < 0)
                         return r;
 
+                if (link->udev_device) {
+                        const char *l2;
+
+                        l2 = udev_device_get_sysattr_value(link->udev_device, "layer2");
+                        if (l2) {
+                                unsigned layer2;
+
+                                r = safe_atou(l2, &layer2);
+                                if (r < 0)
+                                        return r;
+
+                                if (!layer2) {
+                                        r = sd_dhcp_client_request_broadcast(link->dhcp_client);
+                                        if (r < 0)
+                                                return r;
+                                }
+                        }
+                }
+
                 r = sd_dhcp_client_attach_event(link->dhcp_client, NULL, 0);
                 if (r < 0)
                         return r;
